@@ -1,4 +1,4 @@
--- Generated from template
+_G.nCOUNTDOWNTIMER = 901
 
 if CHideoutGameMode == nil then
 	CHideoutGameMode = class({})
