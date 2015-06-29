@@ -1,0 +1,8 @@
+"AddonInfo"
+{
+	"TeamCount"		"10"
+	"hideout"
+	{
+		"MaxPlayers"		"10"
+	}
+}
