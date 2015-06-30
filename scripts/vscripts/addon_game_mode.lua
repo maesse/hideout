@@ -59,9 +59,74 @@ function CHideoutGameMode:InitGameMode()
 	GameRules:GetGameModeEntity():SetTopBarTeamValuesVisible( false )
 	GameRules:SetHideKillMessageHeaders( true )
 	GameRules:SetUseUniversalShopMode( true )
+  
+  ListenToGameEvent( "game_rules_state_change", Dynamic_Wrap( CHideoutGameMode, 'OnGameRulesStateChange' ), self )
 	
 	GameRules:GetGameModeEntity():SetThink( "OnThink", self, "GlobalThink", 2 )
 	print("Finished init.")
+end
+
+---------------------------------------------------------------------------
+-- Simple scoreboard using debug text
+---------------------------------------------------------------------------
+function CHideoutGameMode:UpdateScoreboard()
+	local sortedTeams = {}
+	for _, team in pairs( self.m_GatheredShuffledTeams ) do
+		table.insert( sortedTeams, { teamID = team, teamScore = GetTeamHeroKills( team ) } )
+	end
+
+	-- reverse-sort by score
+	table.sort( sortedTeams, function(a,b) return ( a.teamScore > b.teamScore ) end )
+
+	for _, t in pairs( sortedTeams ) do
+		local clr = self:ColorForTeam( t.teamID )
+
+		-- Scaleform UI Scoreboard
+		local score = 
+		{
+			team_id = t.teamID,
+			team_score = t.teamScore
+		}
+		FireGameEvent( "score_board", score )
+	end
+	-- Leader effects (moved from OnTeamKillCredit)
+	local leader = sortedTeams[1].teamID
+	--print("Leader = " .. leader)
+	self.leadingTeam = leader
+	self.runnerupTeam = sortedTeams[2].teamID
+	self.leadingTeamScore = sortedTeams[1].teamScore
+	self.runnerupTeamScore = sortedTeams[2].teamScore
+	if sortedTeams[1].teamScore == sortedTeams[2].teamScore then
+		self.isGameTied = true
+	else
+		self.isGameTied = false
+	end
+	local allHeroes = HeroList:GetAllHeroes()
+	for _,entity in pairs( allHeroes) do
+		if entity:GetTeamNumber() == leader and sortedTeams[1].teamScore ~= sortedTeams[2].teamScore then
+			if entity:IsAlive() == true then
+				-- Attaching a particle to the leading team heroes
+				local existingParticle = entity:Attribute_GetIntValue( "particleID", -1 )
+       			if existingParticle == -1 then
+       				local particleLeader = ParticleManager:CreateParticle( "particles/leader/leader_overhead.vpcf", PATTACH_OVERHEAD_FOLLOW, entity )
+					ParticleManager:SetParticleControlEnt( particleLeader, PATTACH_OVERHEAD_FOLLOW, entity, PATTACH_OVERHEAD_FOLLOW, "follow_overhead", entity:GetAbsOrigin(), true )
+					entity:Attribute_SetIntValue( "particleID", particleLeader )
+				end
+			else
+				local particleLeader = entity:Attribute_GetIntValue( "particleID", -1 )
+				if particleLeader ~= -1 then
+					ParticleManager:DestroyParticle( particleLeader, true )
+					entity:DeleteAttribute( "particleID" )
+				end
+			end
+		else
+			local particleLeader = entity:Attribute_GetIntValue( "particleID", -1 )
+			if particleLeader ~= -1 then
+				ParticleManager:DestroyParticle( particleLeader, true )
+				entity:DeleteAttribute( "particleID" )
+			end
+		end
+	end
 end
 
 -- Evaluate the state of the game
@@ -71,6 +136,8 @@ function CHideoutGameMode:OnThink()
         return 1
     end
 	
+  self:UpdateScoreboard()
+  
 	if self.countdownEnabled == true then
 		CountdownTimer()
 		if nCOUNTDOWNTIMER == 30 then
@@ -100,6 +167,53 @@ function CHideoutGameMode:OnThink()
 	end
 	
 	return 1
+end
+
+---------------------------------------------------------------------------
+-- Event: Game state change handler
+---------------------------------------------------------------------------
+function CHideoutGameMode:OnGameRulesStateChange()
+	local nNewState = GameRules:State_Get()
+	print( "OnGameRulesStateChange: " .. nNewState )
+
+	if nNewState == DOTA_GAMERULES_STATE_HERO_SELECTION then
+
+	end
+
+	if nNewState == DOTA_GAMERULES_STATE_PRE_GAME then
+		local numberOfPlayers = PlayerResource:GetPlayerCount()
+		if numberOfPlayers > 7 then
+			--self.TEAM_KILLS_TO_WIN = 25
+			nCOUNTDOWNTIMER = 901
+		elseif numberOfPlayers > 4 and numberOfPlayers <= 7 then
+			--self.TEAM_KILLS_TO_WIN = 20
+			nCOUNTDOWNTIMER = 721
+		else
+			--self.TEAM_KILLS_TO_WIN = 15
+			nCOUNTDOWNTIMER = 601
+		end
+
+		CustomNetTables:SetTableValue( "game_state", "victory_condition", { kills_to_win = 10 } );
+
+		self._fPreGameStartTime = GameRules:GetGameTime()
+	end
+
+	if nNewState == DOTA_GAMERULES_STATE_GAME_IN_PROGRESS then
+		--print( "OnGameRulesStateChange: Game In Progress" )
+		self.countdownEnabled = true
+		CustomGameEventManager:Send_ServerToAllClients( "show_timer", {} )
+	end
+end
+
+---------------------------------------------------------------------------
+-- Get the color associated with a given teamID
+---------------------------------------------------------------------------
+function CHideoutGameMode:ColorForTeam( teamID )
+	local color = self.m_TeamColors[ teamID ]
+	if color == nil then
+		color = { 255, 255, 255 } -- default to white
+	end
+	return color
 end
 
 ---------------------------------------------------------------------------
