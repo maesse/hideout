@@ -30,6 +30,9 @@ end
 function CHideoutGameMode:InitGameMode()
 	print("Hideout is loaded.")
 	
+  
+  GameRules:SetSameHeroSelectionEnabled(true)
+  
 	GameRules:GetGameModeEntity().CHideoutGameMode = self
 	
   -- Countdown starts when game begins
@@ -321,12 +324,12 @@ function CHideoutGameMode:GatherAndRegisterValidTeams()
 		print( " - " .. team .. " ( " .. GetTeamName( team ) .. " )" )
 	end
 
-	print( "Setting up teams:" )
+	print( "Setting up teams - JUST SETTING MAX PLAYERS TO 5 FOR NOW:" )
 	for team = 0, (DOTA_TEAM_COUNT-1) do
-		local maxPlayers = 0
-		if ( nil ~= TableFindKey( foundTeamsList, team ) ) then
-			maxPlayers = maxPlayersPerValidTeam
-		end
+		local maxPlayers = 5
+--		if ( nil ~= TableFindKey( foundTeamsList, team ) ) then
+--			maxPlayers = maxPlayersPerValidTeam
+--		end
 		print( " - " .. team .. " ( " .. GetTeamName( team ) .. " ) -> max players = " .. tostring(maxPlayers) )
 		GameRules:SetCustomGameTeamMaxPlayers( team, maxPlayers )
 	end
