@@ -26,6 +26,7 @@ function CHideoutGameMode:InitGameMode()
 	
 	GameRules:GetGameModeEntity().CHideoutGameMode = self
 	
+  -- Countdown starts when game begins
 	self.countdownEnabled = false
 	
 --	Set team colors
@@ -48,9 +49,8 @@ function CHideoutGameMode:InitGameMode()
 		end
 	end
 	
-	self:GatherAndRegisterValidTeams()
-	
-	-- Show the ending scoreboard immediately
+	-- Stuff from overthrow
+  self:GatherAndRegisterValidTeams()
 	GameRules:SetCustomGameEndDelay( 0 )
 	GameRules:SetCustomVictoryMessageDuration( 10 )
 	GameRules:SetPreGameTime( 10 )
@@ -60,74 +60,33 @@ function CHideoutGameMode:InitGameMode()
 	GameRules:SetHideKillMessageHeaders( true )
 	GameRules:SetUseUniversalShopMode( true )
   
+  -- Game event listeners
   ListenToGameEvent( "game_rules_state_change", Dynamic_Wrap( CHideoutGameMode, 'OnGameRulesStateChange' ), self )
+  ListenToGameEvent( "player_say", Dynamic_Wrap(CHideoutGameMode, 'PlayerSay'), self)
+  
+  -- Console commands
+  Convars:RegisterCommand( "spawnhero", function(name, param) self:TestFunc(param) end, "Spawns a hero.", FCVAR_CHEAT )
 	
 	GameRules:GetGameModeEntity():SetThink( "OnThink", self, "GlobalThink", 2 )
 	print("Finished init.")
 end
 
----------------------------------------------------------------------------
--- Simple scoreboard using debug text
----------------------------------------------------------------------------
-function CHideoutGameMode:UpdateScoreboard()
-	local sortedTeams = {}
-	for _, team in pairs( self.m_GatheredShuffledTeams ) do
-		table.insert( sortedTeams, { teamID = team, teamScore = GetTeamHeroKills( team ) } )
-	end
-
-	-- reverse-sort by score
-	table.sort( sortedTeams, function(a,b) return ( a.teamScore > b.teamScore ) end )
-
-	for _, t in pairs( sortedTeams ) do
-		local clr = self:ColorForTeam( t.teamID )
-
-		-- Scaleform UI Scoreboard
-		local score = 
-		{
-			team_id = t.teamID,
-			team_score = t.teamScore
-		}
-		FireGameEvent( "score_board", score )
-	end
-	-- Leader effects (moved from OnTeamKillCredit)
-	local leader = sortedTeams[1].teamID
-	--print("Leader = " .. leader)
-	self.leadingTeam = leader
-	self.runnerupTeam = sortedTeams[2].teamID
-	self.leadingTeamScore = sortedTeams[1].teamScore
-	self.runnerupTeamScore = sortedTeams[2].teamScore
-	if sortedTeams[1].teamScore == sortedTeams[2].teamScore then
-		self.isGameTied = true
-	else
-		self.isGameTied = false
-	end
-	local allHeroes = HeroList:GetAllHeroes()
-	for _,entity in pairs( allHeroes) do
-		if entity:GetTeamNumber() == leader and sortedTeams[1].teamScore ~= sortedTeams[2].teamScore then
-			if entity:IsAlive() == true then
-				-- Attaching a particle to the leading team heroes
-				local existingParticle = entity:Attribute_GetIntValue( "particleID", -1 )
-       			if existingParticle == -1 then
-       				local particleLeader = ParticleManager:CreateParticle( "particles/leader/leader_overhead.vpcf", PATTACH_OVERHEAD_FOLLOW, entity )
-					ParticleManager:SetParticleControlEnt( particleLeader, PATTACH_OVERHEAD_FOLLOW, entity, PATTACH_OVERHEAD_FOLLOW, "follow_overhead", entity:GetAbsOrigin(), true )
-					entity:Attribute_SetIntValue( "particleID", particleLeader )
-				end
-			else
-				local particleLeader = entity:Attribute_GetIntValue( "particleID", -1 )
-				if particleLeader ~= -1 then
-					ParticleManager:DestroyParticle( particleLeader, true )
-					entity:DeleteAttribute( "particleID" )
-				end
-			end
-		else
-			local particleLeader = entity:Attribute_GetIntValue( "particleID", -1 )
-			if particleLeader ~= -1 then
-				ParticleManager:DestroyParticle( particleLeader, true )
-				entity:DeleteAttribute( "particleID" )
-			end
-		end
-	end
+function CHideoutGameMode:PlayerSay(keys)
+  print("Should work but doesn't.")
 end
+
+function CHideoutGameMode:TestFunc(text)
+  local cl = Convars:GetDOTACommandClient()
+  
+  local result = CreateHeroForPlayer("npc_dota_hero_" .. text, cl)
+  result:RespawnUnit()
+  result:SetTeam(DOTA_TEAM_NEUTRALS)
+  print(result:GetHealth())
+  
+  
+end
+
+
 
 -- Evaluate the state of the game
 function CHideoutGameMode:OnThink()
@@ -135,6 +94,11 @@ function CHideoutGameMode:OnThink()
 	if GameRules:IsGamePaused() == true then
         return 1
     end
+  
+  local allHeroes = HeroList:GetAllHeroes()
+  for _,entity in pairs( allHeroes) do
+    --Say(entity, "Hello there", false)
+  end
 	
   self:UpdateScoreboard()
   
@@ -206,17 +170,6 @@ function CHideoutGameMode:OnGameRulesStateChange()
 end
 
 ---------------------------------------------------------------------------
--- Get the color associated with a given teamID
----------------------------------------------------------------------------
-function CHideoutGameMode:ColorForTeam( teamID )
-	local color = self.m_TeamColors[ teamID ]
-	if color == nil then
-		color = { 255, 255, 255 } -- default to white
-	end
-	return color
-end
-
----------------------------------------------------------------------------
 -- Scan the map to see which teams have spawn points
 ---------------------------------------------------------------------------
 function CHideoutGameMode:GatherAndRegisterValidTeams()
@@ -260,4 +213,78 @@ function CHideoutGameMode:GatherAndRegisterValidTeams()
 		print( " - " .. team .. " ( " .. GetTeamName( team ) .. " ) -> max players = " .. tostring(maxPlayers) )
 		GameRules:SetCustomGameTeamMaxPlayers( team, maxPlayers )
 	end
+end
+
+---------------------------------------------------------------------------
+-- Simple scoreboard using debug text
+---------------------------------------------------------------------------
+function CHideoutGameMode:UpdateScoreboard()
+	local sortedTeams = {}
+	for _, team in pairs( self.m_GatheredShuffledTeams ) do
+		table.insert( sortedTeams, { teamID = team, teamScore = GetTeamHeroKills( team ) } )
+	end
+
+	-- reverse-sort by score
+	table.sort( sortedTeams, function(a,b) return ( a.teamScore > b.teamScore ) end )
+
+	for _, t in pairs( sortedTeams ) do
+		local clr = self:ColorForTeam( t.teamID )
+
+		-- Scaleform UI Scoreboard
+		local score = 
+		{
+			team_id = t.teamID,
+			team_score = t.teamScore
+		}
+		FireGameEvent( "score_board", score )
+	end
+	-- Leader effects (moved from OnTeamKillCredit)
+	local leader = sortedTeams[1].teamID
+	--print("Leader = " .. leader)
+	self.leadingTeam = leader
+	self.runnerupTeam = sortedTeams[2].teamID
+	self.leadingTeamScore = sortedTeams[1].teamScore
+	self.runnerupTeamScore = sortedTeams[2].teamScore
+	if sortedTeams[1].teamScore == sortedTeams[2].teamScore then
+		self.isGameTied = true
+	else
+		self.isGameTied = false
+	end
+	local allHeroes = HeroList:GetAllHeroes()
+	for _,entity in pairs( allHeroes) do
+		if entity:GetTeamNumber() == leader and sortedTeams[1].teamScore ~= sortedTeams[2].teamScore then
+			if entity:IsAlive() == true then
+				-- Attaching a particle to the leading team heroes
+				local existingParticle = entity:Attribute_GetIntValue( "particleID", -1 )
+       			if existingParticle == -1 then
+       				local particleLeader = ParticleManager:CreateParticle( "particles/leader/leader_overhead.vpcf", PATTACH_OVERHEAD_FOLLOW, entity )
+					ParticleManager:SetParticleControlEnt( particleLeader, PATTACH_OVERHEAD_FOLLOW, entity, PATTACH_OVERHEAD_FOLLOW, "follow_overhead", entity:GetAbsOrigin(), true )
+					entity:Attribute_SetIntValue( "particleID", particleLeader )
+				end
+			else
+				local particleLeader = entity:Attribute_GetIntValue( "particleID", -1 )
+				if particleLeader ~= -1 then
+					ParticleManager:DestroyParticle( particleLeader, true )
+					entity:DeleteAttribute( "particleID" )
+				end
+			end
+		else
+			local particleLeader = entity:Attribute_GetIntValue( "particleID", -1 )
+			if particleLeader ~= -1 then
+				ParticleManager:DestroyParticle( particleLeader, true )
+				entity:DeleteAttribute( "particleID" )
+			end
+		end
+	end
+end
+
+---------------------------------------------------------------------------
+-- Get the color associated with a given teamID
+---------------------------------------------------------------------------
+function CHideoutGameMode:ColorForTeam( teamID )
+	local color = self.m_TeamColors[ teamID ]
+	if color == nil then
+		color = { 255, 255, 255 } -- default to white
+	end
+	return color
 end

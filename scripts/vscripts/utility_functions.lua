@@ -1,5 +1,6 @@
 --[[ utility_functions.lua ]]
 
+
 ---------------------------------------------------------------------------
 -- Handle messages
 ---------------------------------------------------------------------------
@@ -9,6 +10,16 @@ function BroadcastMessage( sMessage, fDuration )
         duration = fDuration
     }
     FireGameEvent( "show_center_message", centerMessage )
+end
+
+function PrintTable(tbl)
+  if(tbl == nil) then
+    print("PrintTable: Passed nil value")
+    return
+  end
+  for key,val in pairs(tbl) do
+    print(key, val)
+  end
 end
 
 function PickRandomShuffle( reference_list, bucket )
@@ -105,3 +116,5 @@ function SetTimer( cmdName, time )
     print( "Set the timer to: " .. time )
     nCOUNTDOWNTIMER = time
 end
+
+
