@@ -28,6 +28,10 @@ function CHideoutGameMode:InitGameMode()
 	
   -- Countdown starts when game begins
 	self.countdownEnabled = false
+  self.gameStarted = false;
+  self.roundStarted = false;
+  self.t2Pool = {}
+  self.t2PoolIndex = 0
 	
 --	Set team colors
 	self.m_TeamColors = {}
@@ -65,10 +69,42 @@ function CHideoutGameMode:InitGameMode()
   ListenToGameEvent( "player_say", Dynamic_Wrap(CHideoutGameMode, 'PlayerSay'), self)
   
   -- Console commands
+  Convars:RegisterCommand( "hide_init", function(name, param) self:InitHideout(param) end, "Setup hideout.", FCVAR_CHEAT )
+  Convars:RegisterCommand( "hide_nextround", function(name, param) self:NextRound(param) end, "Go to next round.", FCVAR_CHEAT )
   Convars:RegisterCommand( "spawnhero", function(name, param) self:TestFunc(param) end, "Spawns a hero.", FCVAR_CHEAT )
 	
 	GameRules:GetGameModeEntity():SetThink( "OnThink", self, "GlobalThink", 2 )
 	print("Finished init.")
+end
+
+-- Setup up for the first game
+function CHideoutGameMode:InitHideout(keys)
+  print("Initializing hideout")
+  -- Set up T2 pool
+  local ent = Entities:First()
+  while ent do
+    print(ent:GetEntityIndex() .. ":" .. ent:GetClassname())
+    ent = Entities:Next(ent)
+  end
+  
+  for _, playerStart in pairs( Entities:FindAllByClassname( "player" ) ) do
+		print("Found a player! :)")
+	end
+end
+
+-- Continue to the next round
+function CHideoutGameMode:NextRound(keys)
+  
+end
+
+-- Initializes a round
+function CHideoutGameMode:PreRound(keys)
+  
+end
+
+-- Finishes a round
+function CHideoutGameMode:PostRound(keys)
+  
 end
 
 function CHideoutGameMode:PlayerSay(keys)
