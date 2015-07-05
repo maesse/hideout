@@ -1,4 +1,10 @@
 _G.nCOUNTDOWNTIMER = 901
+_G.SEEKER_TEAM = DOTA_TEAM_GOODGUYS
+_G.HIDER_TEAM = DOTA_TEAM_BADGUYS
+_G.TEAMNAME = {
+    [SEEKER_TEAM] = "Seeker Team",
+    [HIDER_TEAM] = "Hider Team"
+  }
 
 if CHideoutGameMode == nil then
 	CHideoutGameMode = class({})
@@ -30,6 +36,8 @@ function CHideoutGameMode:InitGameMode()
 	self.countdownEnabled = false
   self.gameStarted = false;
   self.roundStarted = false;
+  self.currentHider = nil;
+  self.playerPool = {}
   self.t2Pool = {}
   self.t2PoolIndex = 0
 	
@@ -77,34 +85,107 @@ function CHideoutGameMode:InitGameMode()
 	print("Finished init.")
 end
 
+function CHideoutGameMode:GetHeroesControlled(playerid)
+  local results = {}
+  local heroes = HeroList:GetAllHeroes()
+  for _,hero in pairs(heroes) do
+    if playerid == hero:GetPlayerID() then
+      results[#results+1] = hero
+    end
+  end
+  return results
+end
+
 -- Setup up for the first game
 function CHideoutGameMode:InitHideout(keys)
   print("Initializing hideout")
-  -- Set up T2 pool
-  local ent = Entities:First()
-  while ent do
-    print(ent:GetEntityIndex() .. ":" .. ent:GetClassname())
-    ent = Entities:Next(ent)
-  end
   
-  for _, playerStart in pairs( Entities:FindAllByClassname( "player" ) ) do
-		print("Found a player! :)")
+  -- Full reset of gamestate values
+  self.gameStarted = false
+  self.currentHider = nil
+  self.t2PoolIndex = 1
+  self.t2Pool = {}
+  self.playerPool = {}
+  
+  -- Find all players and set up a hiderteam queue
+  for _, player in pairs( Entities:FindAllByClassname( "player" ) ) do
+		print("Found a player! id: " .. player:GetPlayerID())
+    self.t2Pool[#self.t2Pool+1] = player:GetPlayerID()
+    self.playerPool[#self.playerPool+1] = player:GetPlayerID()
 	end
+  print("Found " .. #self.t2Pool .. " players")
+  
+  -- Shuffle and print playerlist
+  self.t2pool = ShuffledList(self.t2Pool)
+  print("Players will be selected in this order:")
+  for i, player in pairs( self.t2Pool ) do
+		print(i .. ": " .. PlayerResource:GetPlayerName(player))
+    local herolist = self:GetHeroesControlled(player)
+    for _,hero in pairs(herolist) do
+      print("-- controlling hero: " .. hero:GetClassname())
+    end
+	end
+  
+  -- Move all players to seeker team
+  for _,player in pairs( self.playerPool ) do
+    self:MoveToTeam(player, SEEKER_TEAM)
+  end
 end
 
 -- Continue to the next round
 function CHideoutGameMode:NextRound(keys)
+  -- Finish previous round
+  self:PostRound()
   
+  -- Move next player to hider team
+  self.gameStarted = true
+  
+  self.currentHider = self.t2Pool[self.t2PoolIndex]
+  print("t2len: " .. #self.t2Pool)
+  print("next player index:" .. self.t2PoolIndex .. "obj:" .. self.currentHider)
+  self:MoveToTeam(self.currentHider, HIDER_TEAM)
+  
+  -- Begin next round
+  self:PreRound()
+end
+
+
+function CHideoutGameMode:MoveToTeam(playerid, team)
+  print("Moving player " .. playerid .. " to team " .. TEAMNAME[team])
+  PlayerResource:SetCustomTeamAssignment(playerid, team)
+  local heroes = self:GetHeroesControlled(playerid)
+  for _,hero in pairs(heroes) do
+    hero:SetTeam(team)
+  end
 end
 
 -- Initializes a round
-function CHideoutGameMode:PreRound(keys)
+function CHideoutGameMode:PreRound()
+  print("Setting up next round")
+  self.roundStarted = true
   
+  -- Setup hider and seekers here (abilities etc)
 end
 
 -- Finishes a round
-function CHideoutGameMode:PostRound(keys)
+function CHideoutGameMode:PostRound()
+  print("Finishing current round")
   
+  -- move the hider to the seeker team
+  if self.gameStarted and self.currentHider ~= nil then
+    -- TODO: Calculate scores here?
+    
+    self:MoveToTeam(self.currentHider, SEEKER_TEAM)
+    self.currentHider = nil
+    
+    -- Select next player in queue and make sure player is valid (still connected?)
+    repeat
+      self.t2PoolIndex = (self.t2PoolIndex + 1) % #self.t2Pool
+    until(PlayerResource:IsValidPlayer(self.t2Pool[self.t2PoolIndex]))
+    
+  end
+  
+  self.roundStarted = false
 end
 
 function CHideoutGameMode:PlayerSay(keys)
