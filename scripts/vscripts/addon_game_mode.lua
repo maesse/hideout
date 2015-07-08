@@ -1,4 +1,5 @@
 _G.nCOUNTDOWNTIMER = 901
+_G.nROUNDENDTIMER = 0
 _G.SEEKER_TEAM = DOTA_TEAM_GOODGUYS
 _G.HIDER_TEAM = DOTA_TEAM_BADGUYS
 _G.TEAMNAME = {
@@ -11,6 +12,7 @@ if CHideoutGameMode == nil then
 end
 
 require( "utility_functions" )
+require( "timers" )
 
 function Precache( context )
 	--[[
@@ -20,6 +22,16 @@ function Precache( context )
 			PrecacheResource( "particle", "*.vpcf", context )
 			PrecacheResource( "particle_folder", "particles/folder", context )
 	]]
+  
+  PrecacheResource( "particle", "particles/econ/items/warlock/warlock_staff_glory/warlock_upheaval_hellborn_debuff.vpcf", context)
+  
+  PrecacheResource( "particle", "particles/units/heroes/hero_rattletrap/rattletrap_rocket_flare.vpcf", context)
+  PrecacheResource( "particle", "particles/units/heroes/hero_rattletrap/rattletrap_rocket_flare_explosion.vpcf", context)
+  PrecacheResource( "particle", "particles/units/heroes/hero_rattletrap/rattletrap_rocket_flare_explosion.vpcf", context)
+  
+
+  PrecacheResource( "particle_folder", "particles/units/heroes/hero_rattletrap", context )
+  
 end
 
 -- Create the game mode when we activate
@@ -32,6 +44,9 @@ function CHideoutGameMode:InitGameMode()
 	
   
   GameRules:SetSameHeroSelectionEnabled(true)
+  GameRules:GetGameModeEntity():SetFixedRespawnTime(5)
+  
+  
   
 	GameRules:GetGameModeEntity().CHideoutGameMode = self
 	
@@ -39,6 +54,7 @@ function CHideoutGameMode:InitGameMode()
 	self.countdownEnabled = false
   self.gameStarted = false;
   self.roundStarted = false;
+  self.roundEnded = false;
   self.currentHider = nil;
   self.playerPool = {}
   self.t2Pool = {}
@@ -46,8 +62,8 @@ function CHideoutGameMode:InitGameMode()
 	
 --	Set team colors
 	self.m_TeamColors = {}
-	self.m_TeamColors[DOTA_TEAM_GOODGUYS] = { 61, 210, 150 }	--		Teal
-	self.m_TeamColors[DOTA_TEAM_BADGUYS]  = { 243, 201, 9 }		--		Yellow
+	self.m_TeamColors[DOTA_TEAM_GOODGUYS] = { 0, 0, 255 }	--		Teal
+	self.m_TeamColors[DOTA_TEAM_BADGUYS]  = { 255, 0, 0 }		--		Yellow
 	self.m_TeamColors[DOTA_TEAM_CUSTOM_1] = { 197, 77, 168 }	--      Pink
 	self.m_TeamColors[DOTA_TEAM_CUSTOM_2] = { 255, 108, 0 }		--		Orange
 	self.m_TeamColors[DOTA_TEAM_CUSTOM_3] = { 52, 85, 255 }		--		Blue
@@ -65,19 +81,22 @@ function CHideoutGameMode:InitGameMode()
 	end
 	
 	-- Stuff from overthrow
-  self:GatherAndRegisterValidTeams()
+  self:SetupTeams()
 	GameRules:SetCustomGameEndDelay( 0 )
 	GameRules:SetCustomVictoryMessageDuration( 10 )
 	GameRules:SetPreGameTime( 10 )
 	GameRules:GetGameModeEntity():SetLoseGoldOnDeath( false )
-	GameRules:GetGameModeEntity():SetTopBarTeamValuesOverride( true )
-	GameRules:GetGameModeEntity():SetTopBarTeamValuesVisible( false )
+--	GameRules:GetGameModeEntity():SetTopBarTeamValuesOverride( true )
+--	GameRules:GetGameModeEntity():SetTopBarTeamValuesVisible( false )
 	GameRules:SetHideKillMessageHeaders( true )
 	GameRules:SetUseUniversalShopMode( true )
   
   -- Game event listeners
   ListenToGameEvent( "game_rules_state_change", Dynamic_Wrap( CHideoutGameMode, 'OnGameRulesStateChange' ), self )
   ListenToGameEvent( "player_say", Dynamic_Wrap(CHideoutGameMode, 'PlayerSay'), self)
+  ListenToGameEvent( "entity_killed", Dynamic_Wrap(CHideoutGameMode, 'EntityKilled'), self)
+  ListenToGameEvent( "npc_spawned", Dynamic_Wrap(CHideoutGameMode, 'NPCSpawned'), self)
+  
   
   -- Console commands
   Convars:RegisterCommand( "hide_init", function(name, param) self:InitHideout(param) end, "Setup hideout.", FCVAR_CHEAT )
@@ -103,8 +122,10 @@ end
 function CHideoutGameMode:InitHideout(keys)
   print("Initializing hideout")
   
+  
   -- Full reset of gamestate values
   self.gameStarted = false
+  self.roundEnded = false;
   self.currentHider = nil
   self.t2PoolIndex = 1
   self.t2Pool = {}
@@ -112,27 +133,27 @@ function CHideoutGameMode:InitHideout(keys)
   
   -- Find all players and set up a hiderteam queue
   for _, player in pairs( Entities:FindAllByClassname( "player" ) ) do
-		print("Found a player! id: " .. player:GetPlayerID())
-    self.t2Pool[#self.t2Pool+1] = player:GetPlayerID()
-    self.playerPool[#self.playerPool+1] = player:GetPlayerID()
+		print("Found a player! id: " .. player:GetPlayerID() .. ", #self.t2Pool: " .. #self.t2Pool)
+    --self.t2Pool[#self.t2Pool + 1] = player:GetPlayerID()
+    self.playerPool[#self.playerPool + 1] = player:GetPlayerID()
 	end
-  print("Found " .. #self.t2Pool .. " players")
+--  print("Found " .. #self.t2Pool .. " players")
   
   -- Shuffle and print playerlist
-  self.t2pool = ShuffledList(self.t2Pool)
-  print("Players will be selected in this order:")
-  for i, player in pairs( self.t2Pool ) do
-		print(i .. ": " .. PlayerResource:GetPlayerName(player))
-    local herolist = self:GetHeroesControlled(player)
-    for _,hero in pairs(herolist) do
-      print("-- controlling hero: " .. hero:GetClassname())
-    end
-	end
+--  self.t2pool = ShuffledList(self.t2Pool)
+--  print("Players will be selected in this order:")
+--  for i, player in pairs( self.t2Pool ) do
+--		print(i .. ": " .. PlayerResource:GetPlayerName(player))
+--    local herolist = self:GetHeroesControlled(player)
+--    for _,hero in pairs(herolist) do
+--      print("-- controlling hero: " .. hero:GetClassname())
+--    end
+--	end
   
   -- Move all players to seeker team
-  for _,player in pairs( self.playerPool ) do
-    self:MoveToTeam(player, SEEKER_TEAM)
-  end
+--  for _,player in pairs( self.playerPool ) do
+--    self:MoveToTeam(player, SEEKER_TEAM)
+--  end
 end
 
 -- Continue to the next round
@@ -140,16 +161,55 @@ function CHideoutGameMode:NextRound(keys)
   -- Finish previous round
   self:PostRound()
   
-  -- Move next player to hider team
   self.gameStarted = true
   
-  self.currentHider = self.t2Pool[self.t2PoolIndex]
-  print("t2len: " .. #self.t2Pool)
-  print("next player index:" .. self.t2PoolIndex .. "obj:" .. self.currentHider)
-  self:MoveToTeam(self.currentHider, HIDER_TEAM)
+  --Add abilities:
+  print("Adding abilities - #self.playerPool: " .. #self.playerPool)
+  for _, playerID in pairs( self.playerPool ) do
+    local herolist = self:GetHeroesControlled(playerID)
+    for _,hero in pairs(herolist) do
+      print("adding abilities for hero: " .. hero:GetClassname())
+      
+      --Get team
+      team = PlayerResource:GetTeam(playerID)
+      if (team == SEEKER_TEAM) then
+        CHideoutGameMode:AddSeekerAbilities(hero)
+      elseif (team == HIDER_TEAM) then
+        CHideoutGameMode:AddHiderAbilities(hero)
+      end
+    end
+  end
+  
+  --self.currentHider = self.t2Pool[self.t2PoolIndex]
+
+ -- print("self.t2PoolIndex: " .. self.t2PoolIndex)
+ -- print("next player index:" .. self.t2PoolIndex .. ", obj: " .. self.currentHider)
+  --self:MoveToTeam(self.currentHider, HIDER_TEAM)
   
   -- Begin next round
   self:PreRound()
+end
+
+
+function CHideoutGameMode:AddSeekerAbilities(hero)
+  --hero:AddAbility("templar_assassin_refraction_holdout")
+  
+  for i=0,15 do
+--    hero:RemoveAbility("")
+  end
+
+  hero:AddAbility("rattletrap_rocket_flare")
+  hero:AddAbility("naga_siren_ensnare")
+  hero:AddAbility("mirana_arrow")
+  hero:AddAbility("mirana_invis")
+  
+  
+end
+
+
+function CHideoutGameMode:AddHiderAbilities(hero)
+  
+  
 end
 
 
@@ -166,6 +226,7 @@ end
 function CHideoutGameMode:PreRound()
   print("Setting up next round")
   self.roundStarted = true
+  self.roundEnded = false
   
   -- Setup hider and seekers here (abilities etc)
 end
@@ -178,34 +239,26 @@ function CHideoutGameMode:PostRound()
   if self.gameStarted and self.currentHider ~= nil then
     -- TODO: Calculate scores here?
     
-    self:MoveToTeam(self.currentHider, SEEKER_TEAM)
-    self.currentHider = nil
+    --self:MoveToTeam(self.currentHider, SEEKER_TEAM)
+    --self.currentHider = nil
     
     -- Select next player in queue and make sure player is valid (still connected?)
-    repeat
-      self.t2PoolIndex = (self.t2PoolIndex + 1) % #self.t2Pool
-    until(PlayerResource:IsValidPlayer(self.t2Pool[self.t2PoolIndex]))
+--    repeat
+--      self.t2PoolIndex = (self.t2PoolIndex % #self.t2Pool) + 1
+--    until(PlayerResource:IsValidPlayer(self.t2Pool[self.t2PoolIndex]))
     
   end
   
   self.roundStarted = false
 end
 
-function CHideoutGameMode:PlayerSay(keys)
-  print("Should work but doesn't.")
-end
 
-function CHideoutGameMode:TestFunc(text)
-  local cl = Convars:GetDOTACommandClient()
-  
-  local result = CreateHeroForPlayer("npc_dota_hero_" .. text, cl)
-  result:RespawnUnit()
-  result:SetTeam(DOTA_TEAM_NEUTRALS)
-  print(result:GetHealth())
-  
-  
+-- Ends a round
+function CHideoutGameMode:EndRound()
+  print("Ending current round")  
+  self.roundEnded = true
+  nROUNDENDTIMER = 5
 end
-
 
 
 -- Evaluate the state of the game
@@ -215,13 +268,23 @@ function CHideoutGameMode:OnThink()
         return 1
     end
   
+  --Testing
   local allHeroes = HeroList:GetAllHeroes()
   for _,entity in pairs( allHeroes) do
     --Say(entity, "Hello there", false)
   end
-	
-  self:UpdateScoreboard()
-  
+	  
+  --Round end timer
+  if (self.roundEnded) then
+    nROUNDENDTIMER = nROUNDENDTIMER - 1
+    if (nROUNDENDTIMER <= 0) then
+      CHideoutGameMode:NextRound(nil)
+    end
+    
+    print("nROUNDENDTIMER: " .. nROUNDENDTIMER)
+  end
+    
+  --Game timer
 	if self.countdownEnabled == true then
 		CountdownTimer()
 		if nCOUNTDOWNTIMER == 30 then
@@ -241,7 +304,7 @@ function CHideoutGameMode:OnThink()
 				}
 				CustomGameEventManager:Send_ServerToAllClients( "overtime_alert", broadcast_killcount )
 			end
-       	end
+    end
 	end
 	
 	if GameRules:State_Get() == DOTA_GAMERULES_STATE_GAME_IN_PROGRESS then
@@ -253,10 +316,88 @@ function CHideoutGameMode:OnThink()
 	return 1
 end
 
+
+
 ---------------------------------------------------------------------------
--- Event: Game state change handler
+-- Setup teams
 ---------------------------------------------------------------------------
-function CHideoutGameMode:OnGameRulesStateChange()
+function CHideoutGameMode:SetupTeams()
+  
+	for team = 0, (DOTA_TEAM_COUNT-1) do
+    if (team == DOTA_TEAM_GOODGUYS) then GameRules:SetCustomGameTeamMaxPlayers( team, 5 ) 
+    elseif (team == DOTA_TEAM_BADGUYS) then GameRules:SetCustomGameTeamMaxPlayers( team, 5 ) else
+    GameRules:SetCustomGameTeamMaxPlayers( team, 0 ) end
+	end
+end
+
+
+
+---------------------------------------------------------------------------
+-- Get the color associated with a given teamID
+---------------------------------------------------------------------------
+function CHideoutGameMode:ColorForTeam( teamID )
+	local color = self.m_TeamColors[ teamID ]
+	if color == nil then
+		color = { 255, 255, 255 } -- default to white
+	end
+	return color
+end
+
+
+function CHideoutGameMode:TestFunc(text)
+  local cl = Convars:GetDOTACommandClient()
+  
+  local result = CreateHeroForPlayer("npc_dota_hero_" .. text, cl)
+  result:RespawnUnit()
+  result:SetTeam(DOTA_TEAM_NEUTRALS)
+  print(result:GetHealth())
+  
+  
+end
+
+
+
+----------------------------------------
+--EVENTS--------------------------------
+----------------------------------------
+function CHideoutGameMode:PlayerSay(keys)
+  print("Should work but doesn't.")
+end
+
+function CHideoutGameMode:EntityKilled(tbl) --(entindex_killed, entindex_attacker, entindex_inflictor, damagebits)
+  print("EntityKilled - entindex_killed: " .. tbl.entindex_killed)
+  --Was hider killder?
+  local hiderHeroEntid = 0
+  local herolist = self:GetHeroesControlled(self.currentHider)
+  for _,hero in pairs(herolist) do
+    if (hero ~= nil) then
+      hiderHeroEntid = hero:GetEntityIndex()
+    end
+  end
+
+  if (tbl.entindex_killed == hiderHeroEntid) then
+    print("Hider was killed!")
+    CHideoutGameMode:EndRound()
+  end
+end
+
+function CHideoutGameMode:NPCSpawned(tbl)
+  print("NPCSpawned - entindex: " .. tbl.entindex)
+  
+  local entity = EntIndexToHScript(tbl.entindex)
+  print("entity:")
+  PrintTable(entity)
+  print(entity:GetOrigin())
+  
+  
+  --
+  --MoveToSomePosition maybe?
+ --  	Vector GetGroundPosition(Vector Vector_1, handle handle_2) 
+ -- 	void FindClearSpaceForUnit(handle handle_1, Vector Vector_2, bool bool_3) 
+end
+
+
+function CHideoutGameMode:OnGameRulesStateChange() -- Event: Game state change handler
 	local nNewState = GameRules:State_Get()
 	print( "OnGameRulesStateChange: " .. nNewState )
 
@@ -289,122 +430,6 @@ function CHideoutGameMode:OnGameRulesStateChange()
 	end
 end
 
----------------------------------------------------------------------------
--- Scan the map to see which teams have spawn points
----------------------------------------------------------------------------
-function CHideoutGameMode:GatherAndRegisterValidTeams()
---	print( "GatherValidTeams:" )
 
-	local foundTeams = {}
-	for _, playerStart in pairs( Entities:FindAllByClassname( "info_player_start_dota" ) ) do
-		foundTeams[  playerStart:GetTeam() ] = true
-	end
 
-	local numTeams = TableCount(foundTeams)
-	print( "GatherValidTeams - Found spawns for a total of " .. numTeams .. " teams" )
-	
-	local foundTeamsList = {}
-	for t, _ in pairs( foundTeams ) do
-		table.insert( foundTeamsList, t )
-	end
 
-	if numTeams == 0 then
-		print( "GatherValidTeams - NO team spawns detected, defaulting to GOOD/BAD" )
-		table.insert( foundTeamsList, DOTA_TEAM_GOODGUYS )
-		table.insert( foundTeamsList, DOTA_TEAM_BADGUYS )
-		numTeams = 2
-	end
-
-	local maxPlayersPerValidTeam = math.floor( 10 / numTeams )
-
-	self.m_GatheredShuffledTeams = ShuffledList( foundTeamsList )
-
-	print( "Final shuffled team list:" )
-	for _, team in pairs( self.m_GatheredShuffledTeams ) do
-		print( " - " .. team .. " ( " .. GetTeamName( team ) .. " )" )
-	end
-
-	print( "Setting up teams - JUST SETTING MAX PLAYERS TO 5 FOR NOW:" )
-	for team = 0, (DOTA_TEAM_COUNT-1) do
-		local maxPlayers = 5
---		if ( nil ~= TableFindKey( foundTeamsList, team ) ) then
---			maxPlayers = maxPlayersPerValidTeam
---		end
-		print( " - " .. team .. " ( " .. GetTeamName( team ) .. " ) -> max players = " .. tostring(maxPlayers) )
-		GameRules:SetCustomGameTeamMaxPlayers( team, maxPlayers )
-	end
-end
-
----------------------------------------------------------------------------
--- Simple scoreboard using debug text
----------------------------------------------------------------------------
-function CHideoutGameMode:UpdateScoreboard()
-	local sortedTeams = {}
-	for _, team in pairs( self.m_GatheredShuffledTeams ) do
-		table.insert( sortedTeams, { teamID = team, teamScore = GetTeamHeroKills( team ) } )
-	end
-
-	-- reverse-sort by score
-	table.sort( sortedTeams, function(a,b) return ( a.teamScore > b.teamScore ) end )
-
-	for _, t in pairs( sortedTeams ) do
-		local clr = self:ColorForTeam( t.teamID )
-
-		-- Scaleform UI Scoreboard
-		local score = 
-		{
-			team_id = t.teamID,
-			team_score = t.teamScore
-		}
-		FireGameEvent( "score_board", score )
-	end
-	-- Leader effects (moved from OnTeamKillCredit)
-	local leader = sortedTeams[1].teamID
-	--print("Leader = " .. leader)
-	self.leadingTeam = leader
-	self.runnerupTeam = sortedTeams[2].teamID
-	self.leadingTeamScore = sortedTeams[1].teamScore
-	self.runnerupTeamScore = sortedTeams[2].teamScore
-	if sortedTeams[1].teamScore == sortedTeams[2].teamScore then
-		self.isGameTied = true
-	else
-		self.isGameTied = false
-	end
-	local allHeroes = HeroList:GetAllHeroes()
-	for _,entity in pairs( allHeroes) do
-		if entity:GetTeamNumber() == leader and sortedTeams[1].teamScore ~= sortedTeams[2].teamScore then
-			if entity:IsAlive() == true then
-				-- Attaching a particle to the leading team heroes
-				local existingParticle = entity:Attribute_GetIntValue( "particleID", -1 )
-       			if existingParticle == -1 then
-       				local particleLeader = ParticleManager:CreateParticle( "particles/leader/leader_overhead.vpcf", PATTACH_OVERHEAD_FOLLOW, entity )
-					ParticleManager:SetParticleControlEnt( particleLeader, PATTACH_OVERHEAD_FOLLOW, entity, PATTACH_OVERHEAD_FOLLOW, "follow_overhead", entity:GetAbsOrigin(), true )
-					entity:Attribute_SetIntValue( "particleID", particleLeader )
-				end
-			else
-				local particleLeader = entity:Attribute_GetIntValue( "particleID", -1 )
-				if particleLeader ~= -1 then
-					ParticleManager:DestroyParticle( particleLeader, true )
-					entity:DeleteAttribute( "particleID" )
-				end
-			end
-		else
-			local particleLeader = entity:Attribute_GetIntValue( "particleID", -1 )
-			if particleLeader ~= -1 then
-				ParticleManager:DestroyParticle( particleLeader, true )
-				entity:DeleteAttribute( "particleID" )
-			end
-		end
-	end
-end
-
----------------------------------------------------------------------------
--- Get the color associated with a given teamID
----------------------------------------------------------------------------
-function CHideoutGameMode:ColorForTeam( teamID )
-	local color = self.m_TeamColors[ teamID ]
-	if color == nil then
-		color = { 255, 255, 255 } -- default to white
-	end
-	return color
-end

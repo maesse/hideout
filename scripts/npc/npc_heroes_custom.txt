@@ -5,21 +5,20 @@
 {
 
 //=================================================================================================================
-// HERO: Rubick
+// HERO: Svenman
 //=================================================================================================================
 	"npc_dota_hero_svenman"
 	{
-		// General
-		//-------------------------------------------------------------------------------------------------------------
+		// General		//-------------------------------------------------------------------------------------------------------------
 		"override_hero"			"npc_dota_hero_sven"
     
-		"MovementSpeed"				"500"									// Speed.
-		"MovementTurnRate"			"0.5"									// Turning rate.
+		"MovementSpeed"				"1200"									// Speed.
+		"MovementTurnRate"			"0.9"									// Turning rate.
 		
     
     
-    // Abilities
-		//-------------------------------------------------------------------------------------------------------------
+  // Abilities
+  //-------------------------------------------------------------------------------------------------------------
 	//	"AbilityLayout"				"6"
 		"Ability1"				  ""  
 		"Ability2"				  ""  
@@ -37,5 +36,41 @@
 		"Ability14"					""
 		"Ability15"					""
 		"Ability16"					""
+    
+    
+    
+    
+	//	"ArmorPhysical"				"0"									// Physical protection.
+	//	"MagicalResistance"				"0"									// Magical protection (percentage).
+
+	//	"AttackCapabilities"		"DOTA_UNIT_CAP_NO_ATTACK"
+		"AttackDamageMin"			"100"										// Damage range min.
+		"AttackDamageMax"			"800"										// Damage range max.
+
+		//"AttributePrimary"			"DOTA_ATTRIBUTE_STRENGTH"
+		//"AttributeBaseStrength"		"2000"										// Base strength
+	//	"AttributeStrengthGain"		"0"										// Strength bonus per level.
+	//	"AttributeBaseIntelligence"	"0"										// Base intelligence
+	//	"AttributeIntelligenceGain"	"0"										// Intelligence bonus per level.
+	//	"AttributeBaseAgility"		"0"										// Base agility
+	//	"AttributeAgilityGain"		"0"										// Agility bonus per level.
+
+	//	"BountyXP"					"0"									// Experience earn.
+	//	"BountyGoldMin"				"0"										// Gold earned min.
+	//	"BountyGoldMax"				"0"										// Gold earned max.
+
+		//"BoundsHullName"			"DOTA_HULL_SIZE_HERO"
+		//"RingRadius"				"70"
+
+	//	"MovementCapabilities"		"DOTA_UNIT_CAP_MOVE_GROUND"
+	//	"MovementSpeed"				"360"									// Speed.
+	//	"MovementTurnRate"			"1.0"									// Turning rate.
+
+	//	"StatusHealth"				"981"									// Base health.
+	//	"StatusHealthRegen"			"0.0"									// Health regeneration rate.
+	//	"StatusMana"				"387"										// Base mana.
+	//	"StatusManaRegen"			"99.96"									// Mana regeneration rate.
+
+	//	"VisionNighttimeRange"		"1800"		
 	}
 }

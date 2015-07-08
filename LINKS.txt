@@ -1,2 +1,15 @@
 Unit/items/heroes API stuff:
 https://moddota.com/forums/discussion/224/datadriven-units
+Abilities:
+https://github.com/Pizzalol/SpellLibrary
+
+
+
+Lua API:
+https://developer.valvesoftware.com/wiki/Dota_2_Workshop_Tools/Scripting/API#CBaseEntity
+Engine events:
+https://developer.valvesoftware.com/wiki/Dota_2_Workshop_Tools/Scripting/Built-In_Engine_Events
+
+
+OTHER MODS:
+https://github.com/D3luxe/Enfos/

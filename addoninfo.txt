@@ -1,6 +1,8 @@
 "AddonInfo"
 {
-	"TeamCount"		"10"
+	"TeamCount"		"2"
+	"maps" 			"hideout"
+	"IsPlayable" "1"
 	"hideout"
 	{
 		"MaxPlayers"		"10"
